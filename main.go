@@ -7,7 +7,7 @@ import (
 	"os"
 	"sync/atomic"
 
-	"github.com/bootdotdev/learn-http-servers/internal/database"
+	"github.com/cpbenite/chirpy/internal/database"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
@@ -15,11 +15,11 @@ import (
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	db             *database.Queries
+	platform       string
 }
 
 func main() {
 	const filepathRoot = "."
-	const port = "8080"
 
 	godotenv.Load()
 	dbURL := os.Getenv("DB_URL")
@@ -33,9 +33,20 @@ func main() {
 	}
 	dbQueries := database.New(dbConn)
 
+	port := os.Getenv("PORT")
+	if port == "" {
+		log.Fatal("PORT must be set")
+	}
+
+	platform := os.Getenv("PLATFORM")
+	if port == "" {
+		log.Fatal("PLATFORM must be set")
+	}
+
 	apiCfg := apiConfig{
 		fileserverHits: atomic.Int32{},
 		db:             dbQueries,
+		platform:       platform,
 	}
 
 	mux := http.NewServeMux()
@@ -43,10 +54,14 @@ func main() {
 	mux.Handle("/app/", fsHandler)
 
 	mux.HandleFunc("GET /api/healthz", handlerReadiness)
-	mux.HandleFunc("POST /api/validate_chirp", handlerChirpsValidate)
 
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics)
+
+	mux.HandleFunc("POST /api/users", apiCfg.handlerCreateUser)
+	mux.HandleFunc("POST /api/chirps", apiCfg.handlerCreateChirps)
+	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)
+	mux.HandleFunc("GET /api/chirps/{chirpId}", apiCfg.handlerGetChirpById)
 
 	srv := &http.Server{
 		Addr:    ":" + port,
